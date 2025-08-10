@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en" class="">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TrustChain - Blockchain Supply Chain Management</title>
+    <meta name="description" content="Blockchain-powered supply chain management platform for transparency and trust" />
+    <script>
+      // Initialize theme early to prevent flash
+      (function() {
+        const savedTheme = localStorage.getItem('trustchain-theme');
+        const root = document.documentElement;
+        
+        if (savedTheme === 'dark') {
+          root.classList.add('dark');
+        } else {
+          root.classList.remove('dark');
+        }
+        
+        console.log('Initial theme loaded:', savedTheme || 'light');
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
