@@ -1,0 +1,360 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "TrustChain Production Infrastructure",
+  "Parameters": {
+    "Environment": {
+      "Type": "String",
+      "Default": "production",
+      "AllowedValues": ["production", "staging"]
+    },
+    "VpcCidr": {
+      "Type": "String",
+      "Default": "10.0.0.0/16"
+    },
+    "DBPassword": {
+      "Type": "String",
+      "NoEcho": true,
+      "MinLength": 8
+    }
+  },
+  "Resources": {
+    "VPC": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": {"Ref": "VpcCidr"},
+        "EnableDnsHostnames": true,
+        "EnableDnsSupport": true,
+        "Tags": [
+          {"Key": "Name", "Value": {"Fn::Sub": "TrustChain-VPC-${Environment}"}}
+        ]
+      }
+    },
+    "PublicSubnet1": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {"Ref": "VPC"},
+        "CidrBlock": "10.0.1.0/24",
+        "AvailabilityZone": {"Fn::Select": [0, {"Fn::GetAZs": ""}]},
+        "MapPublicIpOnLaunch": true,
+        "Tags": [
+          {"Key": "Name", "Value": {"Fn::Sub": "TrustChain-Public-Subnet-1-${Environment}"}}
+        ]
+      }
+    },
+    "PublicSubnet2": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {"Ref": "VPC"},
+        "CidrBlock": "10.0.2.0/24",
+        "AvailabilityZone": {"Fn::Select": [1, {"Fn::GetAZs": ""}]},
+        "MapPublicIpOnLaunch": true,
+        "Tags": [
+          {"Key": "Name", "Value": {"Fn::Sub": "TrustChain-Public-Subnet-2-${Environment}"}}
+        ]
+      }
+    },
+    "PrivateSubnet1": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {"Ref": "VPC"},
+        "CidrBlock": "10.0.3.0/24",
+        "AvailabilityZone": {"Fn::Select": [0, {"Fn::GetAZs": ""}]},
+        "Tags": [
+          {"Key": "Name", "Value": {"Fn::Sub": "TrustChain-Private-Subnet-1-${Environment}"}}
+        ]
+      }
+    },
+    "PrivateSubnet2": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {"Ref": "VPC"},
+        "CidrBlock": "10.0.4.0/24",
+        "AvailabilityZone": {"Fn::Select": [1, {"Fn::GetAZs": ""}]},
+        "Tags": [
+          {"Key": "Name", "Value": {"Fn::Sub": "TrustChain-Private-Subnet-2-${Environment}"}}
+        ]
+      }
+    },
+    "InternetGateway": {
+      "Type": "AWS::EC2::InternetGateway",
+      "Properties": {
+        "Tags": [
+          {"Key": "Name", "Value": {"Fn::Sub": "TrustChain-IGW-${Environment}"}}
+        ]
+      }
+    },
+    "AttachGateway": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {"Ref": "VPC"},
+        "InternetGatewayId": {"Ref": "InternetGateway"}
+      }
+    },
+    "PublicRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {"Ref": "VPC"},
+        "Tags": [
+          {"Key": "Name", "Value": {"Fn::Sub": "TrustChain-Public-RT-${Environment}"}}
+        ]
+      }
+    },
+    "PublicRoute": {
+      "Type": "AWS::EC2::Route",
+      "DependsOn": "AttachGateway",
+      "Properties": {
+        "RouteTableId": {"Ref": "PublicRouteTable"},
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {"Ref": "InternetGateway"}
+      }
+    },
+    "RDSSubnetGroup": {
+      "Type": "AWS::RDS::DBSubnetGroup",
+      "Properties": {
+        "DBSubnetGroupDescription": "Subnet group for TrustChain RDS",
+        "SubnetIds": [{"Ref": "PrivateSubnet1"}, {"Ref": "PrivateSubnet2"}],
+        "Tags": [
+          {"Key": "Name", "Value": {"Fn::Sub": "TrustChain-DB-SubnetGroup-${Environment}"}}
+        ]
+      }
+    },
+    "RDSInstance": {
+      "Type": "AWS::RDS::DBInstance",
+      "Properties": {
+        "DBInstanceIdentifier": {"Fn::Sub": "trustchain-${Environment}"},
+        "DBInstanceClass": "db.t3.micro",
+        "Engine": "postgres",
+        "EngineVersion": "14.6",
+        "MasterUsername": "postgres",
+        "MasterUserPassword": {"Ref": "DBPassword"},
+        "AllocatedStorage": "20",
+        "DBSubnetGroupName": {"Ref": "RDSSubnetGroup"},
+        "VPCSecurityGroups": [{"Ref": "DatabaseSecurityGroup"}],
+        "BackupRetentionPeriod": 7,
+        "MultiAZ": false,
+        "StorageEncrypted": true,
+        "DeletionProtection": true,
+        "Tags": [
+          {"Key": "Name", "Value": {"Fn::Sub": "TrustChain-DB-${Environment}"}}
+        ]
+      }
+    },
+    "ElastiCacheSubnetGroup": {
+      "Type": "AWS::ElastiCache::SubnetGroup",
+      "Properties": {
+        "Description": "Subnet group for TrustChain Redis",
+        "SubnetIds": [{"Ref": "PrivateSubnet1"}, {"Ref": "PrivateSubnet2"}]
+      }
+    },
+    "ElastiCacheCluster": {
+      "Type": "AWS::ElastiCache::CacheCluster",
+      "Properties": {
+        "CacheClusterId": {"Fn::Sub": "trustchain-redis-${Environment}"},
+        "Engine": "redis",
+        "CacheNodeType": "cache.t3.micro",
+        "NumCacheNodes": 1,
+        "CacheSubnetGroupName": {"Ref": "ElastiCacheSubnetGroup"},
+        "VpcSecurityGroupIds": [{"Ref": "CacheSecurityGroup"}],
+        "Tags": [
+          {"Key": "Name", "Value": {"Fn::Sub": "TrustChain-Redis-${Environment}"}}
+        ]
+      }
+    },
+    "ECSCluster": {
+      "Type": "AWS::ECS::Cluster",
+      "Properties": {
+        "ClusterName": {"Fn::Sub": "trustchain-${Environment}"},
+        "CapacityProviders": ["FARGATE"],
+        "DefaultCapacityProviderStrategy": [
+          {
+            "CapacityProvider": "FARGATE",
+            "Weight": 1
+          }
+        ],
+        "Tags": [
+          {"Key": "Name", "Value": {"Fn::Sub": "TrustChain-ECS-${Environment}"}}
+        ]
+      }
+    },
+    "LoadBalancer": {
+      "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      "Properties": {
+        "Name": {"Fn::Sub": "trustchain-alb-${Environment}"},
+        "Type": "application",
+        "Scheme": "internet-facing",
+        "SecurityGroups": [{"Ref": "LoadBalancerSecurityGroup"}],
+        "Subnets": [{"Ref": "PublicSubnet1"}, {"Ref": "PublicSubnet2"}],
+        "Tags": [
+          {"Key": "Name", "Value": {"Fn::Sub": "TrustChain-ALB-${Environment}"}}
+        ]
+      }
+    },
+    "S3Bucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": {"Fn::Sub": "trustchain-frontend-${Environment}"},
+        "WebsiteConfiguration": {
+          "IndexDocument": "index.html",
+          "ErrorDocument": "index.html"
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": false,
+          "BlockPublicPolicy": false,
+          "IgnorePublicAcls": false,
+          "RestrictPublicBuckets": false
+        },
+        "CorsConfiguration": {
+          "CorsRules": [
+            {
+              "AllowedHeaders": ["*"],
+              "AllowedMethods": ["GET", "HEAD"],
+              "AllowedOrigins": ["*"],
+              "MaxAge": 3000
+            }
+          ]
+        }
+      }
+    },
+    "CloudFrontDistribution": {
+      "Type": "AWS::CloudFront::Distribution",
+      "Properties": {
+        "DistributionConfig": {
+          "Origins": [
+            {
+              "DomainName": {"Fn::GetAtt": ["S3Bucket", "RegionalDomainName"]},
+              "Id": "S3Origin",
+              "S3OriginConfig": {
+                "OriginAccessIdentity": ""
+              }
+            }
+          ],
+          "DefaultCacheBehavior": {
+            "TargetOriginId": "S3Origin",
+            "ViewerProtocolPolicy": "redirect-to-https",
+            "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+          },
+          "Enabled": true,
+          "DefaultRootObject": "index.html",
+          "CustomErrorResponses": [
+            {
+              "ErrorCode": 404,
+              "ResponseCode": 200,
+              "ResponsePagePath": "/index.html"
+            }
+          ],
+          "PriceClass": "PriceClass_100"
+        }
+      }
+    },
+    "LoadBalancerSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Security group for load balancer",
+        "VpcId": {"Ref": "VPC"},
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 80,
+            "ToPort": 80,
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 443,
+            "ToPort": 443,
+            "CidrIp": "0.0.0.0/0"
+          }
+        ]
+      }
+    },
+    "ApplicationSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Security group for application",
+        "VpcId": {"Ref": "VPC"},
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 3000,
+            "ToPort": 3000,
+            "SourceSecurityGroupId": {"Ref": "LoadBalancerSecurityGroup"}
+          }
+        ]
+      }
+    },
+    "DatabaseSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Security group for database",
+        "VpcId": {"Ref": "VPC"},
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 5432,
+            "ToPort": 5432,
+            "SourceSecurityGroupId": {"Ref": "ApplicationSecurityGroup"}
+          }
+        ]
+      }
+    },
+    "CacheSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Security group for Redis cache",
+        "VpcId": {"Ref": "VPC"},
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 6379,
+            "ToPort": 6379,
+            "SourceSecurityGroupId": {"Ref": "ApplicationSecurityGroup"}
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "VPCId": {
+      "Description": "VPC ID",
+      "Value": {"Ref": "VPC"},
+      "Export": {
+        "Name": {"Fn::Sub": "TrustChain-VPC-${Environment}"}
+      }
+    },
+    "DatabaseEndpoint": {
+      "Description": "RDS Database Endpoint",
+      "Value": {"Fn::GetAtt": ["RDSInstance", "Endpoint.Address"]},
+      "Export": {
+        "Name": {"Fn::Sub": "TrustChain-DB-Endpoint-${Environment}"}
+      }
+    },
+    "RedisEndpoint": {
+      "Description": "Redis Cache Endpoint",
+      "Value": {"Fn::GetAtt": ["ElastiCacheCluster", "RedisEndpoint.Address"]},
+      "Export": {
+        "Name": {"Fn::Sub": "TrustChain-Redis-Endpoint-${Environment}"}
+      }
+    },
+    "LoadBalancerDNS": {
+      "Description": "Load Balancer DNS Name",
+      "Value": {"Fn::GetAtt": ["LoadBalancer", "DNSName"]},
+      "Export": {
+        "Name": {"Fn::Sub": "TrustChain-ALB-DNS-${Environment}"}
+      }
+    },
+    "CloudFrontDomain": {
+      "Description": "CloudFront Distribution Domain",
+      "Value": {"Fn::GetAtt": ["CloudFrontDistribution", "DomainName"]},
+      "Export": {
+        "Name": {"Fn::Sub": "TrustChain-CF-Domain-${Environment}"}
+      }
+    },
+    "S3BucketName": {
+      "Description": "S3 Bucket Name",
+      "Value": {"Ref": "S3Bucket"},
+      "Export": {
+        "Name": {"Fn::Sub": "TrustChain-S3-Bucket-${Environment}"}
+      }
+    }
+  }
+}

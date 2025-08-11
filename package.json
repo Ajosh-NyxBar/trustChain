@@ -1,0 +1,91 @@
+{
+  "name": "trustchain",
+  "version": "1.0.0",
+  "description": "TrustChain - Blockchain Supply Chain Management System",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:blockchain\" \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:blockchain": "cd blockchain && npm run node",
+    "build": "npm run build:frontend && npm run build:backend",
+    "build:frontend": "cd frontend && npm run build",
+    "build:backend": "cd backend && npm run build",
+    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install && cd ../blockchain && npm install",
+    "test": "npm run test:frontend && npm run test:backend && npm run test:blockchain",
+    "test:frontend": "cd frontend && npm test",
+    "test:backend": "cd backend && npm test",
+    "test:blockchain": "cd blockchain && npm test",
+    "deploy:contracts": "cd blockchain && npm run deploy:mumbai",
+    "deploy:contracts:mainnet": "cd blockchain && npm run deploy:polygon",
+    "verify:contracts": "cd blockchain && npm run verify:mumbai",
+    "verify:contracts:mainnet": "cd blockchain && npm run verify:polygon",
+    "start": "npm run start:frontend",
+    "start:frontend": "cd frontend && npm run preview",
+    "start:backend": "cd backend && npm start",
+    "start:prod": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "lint": "npm run lint:frontend && npm run lint:backend && npm run lint:blockchain",
+    "lint:frontend": "cd frontend && npm run lint",
+    "lint:backend": "cd backend && npm run lint",
+    "lint:blockchain": "cd blockchain && npm run lint",
+    "security:audit": "bash security/security-audit.sh",
+    "security:check": "npm audit --audit-level high",
+    "docker:build": "docker-compose -f docker-compose.prod.yml build",
+    "docker:up": "docker-compose -f docker-compose.prod.yml up -d",
+    "docker:down": "docker-compose -f docker-compose.prod.yml down",
+    "docker:logs": "docker-compose -f docker-compose.prod.yml logs -f",
+    "aws:deploy": "aws cloudformation create-stack --stack-name trustchain-prod --template-body file://infrastructure/cloudformation-template.json --capabilities CAPABILITY_IAM",
+    "aws:update": "aws cloudformation update-stack --stack-name trustchain-prod --template-body file://infrastructure/cloudformation-template.json --capabilities CAPABILITY_IAM",
+    "db:migrate": "cd backend && npm run migrate",
+    "db:seed": "cd backend && npm run seed",
+    "cache:clear": "redis-cli flushall",
+    "logs:backend": "cd backend && pm2 logs",
+    "logs:frontend": "cd frontend && nginx -s reload",
+    "backup:db": "pg_dump $DATABASE_URL > backup_$(date +%Y%m%d_%H%M%S).sql",
+    "restore:db": "psql $DATABASE_URL < backup.sql",
+    "clean": "rimraf frontend/dist frontend/node_modules backend/dist backend/node_modules blockchain/artifacts blockchain/cache blockchain/node_modules node_modules",
+    "postinstall": "echo '🚀 TrustChain installation complete! Run npm run dev to start development.'",
+    "setup": "npm run install:all && npm run deploy:contracts",
+    "setup:prod": "npm run install:all && npm run build && npm run deploy:contracts:mainnet",
+    "reset": "npm run clean && npm run install:all",
+    "health:check": "curl -f http://localhost:3000/health && curl -f http://localhost:5173/health"
+  },
+  "keywords": [
+    "blockchain",
+    "supply-chain",
+    "ethereum",
+    "polygon",
+    "smart-contracts",
+    "solidity",
+    "react",
+    "node.js",
+    "web3",
+    "ipfs",
+    "nft",
+    "defi",
+    "dapp"
+  ],
+  "author": "AKbar - TrustChain Team",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "rimraf": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ajosh-NyxBar/trustChain.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Ajosh-NyxBar/trustChain/issues"
+  },
+  "homepage": "https://github.com/Ajosh-NyxBar/trustChain#readme",
+  "workspaces": [
+    "frontend",
+    "backend",
+    "blockchain"
+  ]
+}

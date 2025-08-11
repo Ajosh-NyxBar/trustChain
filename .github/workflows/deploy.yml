@@ -1,0 +1,112 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+
+jobs:
+  deploy-aws:
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+    
+    - name: Deploy to ECS
+      run: |
+        # Update ECS service with new task definition
+        aws ecs update-service \
+          --cluster trustchain-production \
+          --service trustchain-backend \
+          --force-new-deployment
+        
+        aws ecs update-service \
+          --cluster trustchain-production \
+          --service trustchain-frontend \
+          --force-new-deployment
+    
+    - name: Deploy to S3 and CloudFront
+      run: |
+        # Build frontend
+        cd frontend
+        npm ci
+        npm run build
+        
+        # Deploy to S3
+        aws s3 sync dist/ s3://${{ secrets.S3_BUCKET_NAME }} --delete
+        
+        # Invalidate CloudFront
+        aws cloudfront create-invalidation \
+          --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+          --paths "/*"
+
+  deploy-contracts:
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: ./blockchain
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Use Node.js 20.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+        cache: 'npm'
+        cache-dependency-path: blockchain/package-lock.json
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Deploy contracts to Polygon Mainnet
+      run: npx hardhat run scripts/deploy.js --network polygon
+      env:
+        PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+        POLYGON_RPC_URL: ${{ secrets.POLYGON_RPC_URL }}
+        POLYGONSCAN_API_KEY: ${{ secrets.POLYGONSCAN_API_KEY }}
+    
+    - name: Verify contracts
+      run: npx hardhat verify --network polygon
+      env:
+        POLYGONSCAN_API_KEY: ${{ secrets.POLYGONSCAN_API_KEY }}
+
+  health-check:
+    needs: [deploy-aws]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Health check backend
+      run: |
+        curl -f ${{ secrets.BACKEND_URL }}/health || exit 1
+    
+    - name: Health check frontend
+      run: |
+        curl -f ${{ secrets.FRONTEND_URL }} || exit 1
+    
+    - name: Notify Slack on success
+      if: success()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: success
+        text: '🚀 TrustChain production deployment successful!'
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+    
+    - name: Notify Slack on failure
+      if: failure()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: failure
+        text: '❌ TrustChain production deployment failed!'
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

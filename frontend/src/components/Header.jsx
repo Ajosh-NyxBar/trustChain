@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ShieldCheckIcon, HomeIcon, DocumentTextIcon, ChartBarIcon, CogIcon } from '@heroicons/react/24/outline';
 import ThemeToggle from './ThemeToggle';
+import WalletConnection from './WalletConnection';
 import { useTheme } from '../contexts/ThemeContext';
 
 const Header = () => {
@@ -88,17 +89,8 @@ const Header = () => {
             {/* Theme Toggle */}
             <ThemeToggle />
             
-            <div className="hidden md:block">
-              <div className="flex items-center space-x-3">
-                <div className="text-right">
-                  <p className="text-sm font-medium text-navy-500 dark:text-white">Supply Chain Admin</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">admin@trustchain.com</p>
-                </div>
-                <div className="h-8 w-8 bg-gradient-to-r from-emerald-500 to-sky-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">A</span>
-                </div>
-              </div>
-            </div>
+            {/* Wallet Connection */}
+            <WalletConnection />
             
             <button className="md:hidden p-2 rounded-md text-gray-600 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20">
               <CogIcon className="h-6 w-6" />

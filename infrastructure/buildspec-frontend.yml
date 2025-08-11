@@ -1,0 +1,25 @@
+version: '1.0'
+
+phases:
+  pre_build:
+    commands:
+      - echo Build started on `date`
+      - echo Installing dependencies...
+      - cd frontend
+      - npm ci
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Building the application...
+      - npm run build
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Uploading to S3...
+      - aws s3 sync dist/ s3://$S3_BUCKET --delete
+      - echo Invalidating CloudFront distribution...
+      - aws cloudfront create-invalidation --distribution-id $CLOUDFRONT_DISTRIBUTION_ID --paths "/*"
+artifacts:
+  files:
+    - '**/*'
+  base-directory: frontend/dist

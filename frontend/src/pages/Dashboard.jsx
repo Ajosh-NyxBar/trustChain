@@ -7,6 +7,7 @@ import {
   ArrowUpIcon,
   ArrowDownIcon 
 } from '@heroicons/react/24/outline';
+import ConnectionDebug from '../components/ConnectionDebug';
 
 const StatCard = ({ title, value, icon: Icon, trend, trendValue, color = "emerald" }) => {
   const colorClasses = {
@@ -98,6 +99,11 @@ const Dashboard = () => {
           {stats.map((stat, index) => (
             <StatCard key={index} {...stat} />
           ))}
+        </div>
+
+        {/* Debug Component - Remove in production */}
+        <div className="mb-8">
+          <ConnectionDebug />
         </div>
 
         {/* Quick Actions */}
