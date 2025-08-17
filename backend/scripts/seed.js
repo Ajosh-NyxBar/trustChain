@@ -8,6 +8,18 @@ async function seedDatabase() {
     // Sample users data
     const sampleUsers = [
       {
+        email: 'demo@trustchain.id',
+        password: 'demo123',
+        first_name: 'Demo',
+        last_name: 'User',
+        role: 'supplier',
+        status: 'active',
+        company_name: 'TrustChain Demo Company',
+        company_type: 'umkm',
+        company_address: 'Jl. Demo No. 123, Jakarta, Indonesia',
+        phone: '+6281234567890'
+      },
+      {
         email: 'supplier1@example.com',
         password: 'supplier123',
         first_name: 'Budi',
