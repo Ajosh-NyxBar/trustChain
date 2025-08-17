@@ -131,6 +131,37 @@ router.post('/register', [
     
   } catch (error) {
     console.error('Registration error:', error);
+    
+    // Handle specific validation errors
+    if (error.name === 'SequelizeValidationError') {
+      const validationErrors = error.errors.map(err => ({
+        field: err.path,
+        message: err.message
+      }));
+      
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: 'Please check your input data',
+        details: validationErrors
+      });
+    }
+    
+    // Handle unique constraint violations
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(409).json({
+        error: 'User Already Exists',
+        message: 'An account with this email already exists'
+      });
+    }
+    
+    // Handle enum errors
+    if (error.name === 'SequelizeDatabaseError' && error.message.includes('enum')) {
+      return res.status(400).json({
+        error: 'Invalid Data',
+        message: 'Please select valid options for all fields'
+      });
+    }
+    
     res.status(500).json({
       error: 'Registration Failed',
       message: 'Unable to create account. Please try again.'

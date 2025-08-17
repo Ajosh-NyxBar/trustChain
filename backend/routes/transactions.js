@@ -1,7 +1,7 @@
 const express = require('express');
 const { body, query, validationResult } = require('express-validator');
 const { Transaction, Product, User } = require('../models');
-const { authorize } = require('../middleware/auth');
+const { authMiddleware, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -9,6 +9,7 @@ const router = express.Router();
 // @desc    Get transactions with filtering and pagination
 // @access  Private
 router.get('/', [
+  authMiddleware,
   query('page')
     .optional()
     .isInt({ min: 1 })
@@ -117,6 +118,7 @@ router.get('/', [
 // @desc    Create new transaction
 // @access  Private
 router.post('/', [
+  authMiddleware,
   body('to_user_id')
     .isUUID()
     .withMessage('Valid recipient user ID is required'),
@@ -258,65 +260,11 @@ router.post('/', [
   }
 });
 
-// @route   GET /api/transactions/:id
-// @desc    Get single transaction
-// @access  Private
-router.get('/:id', async (req, res) => {
-  try {
-    const transaction = await Transaction.findByPk(req.params.id, {
-      include: [
-        {
-          model: User,
-          as: 'sender',
-          attributes: ['id', 'first_name', 'last_name', 'company_name', 'role', 'email']
-        },
-        {
-          model: User,
-          as: 'receiver',
-          attributes: ['id', 'first_name', 'last_name', 'company_name', 'role', 'email']
-        },
-        {
-          model: Product,
-          as: 'product'
-        }
-      ]
-    });
-    
-    if (!transaction) {
-      return res.status(404).json({
-        error: 'Transaction Not Found',
-        message: 'The specified transaction does not exist'
-      });
-    }
-    
-    // Check access permissions
-    if (req.user.role !== 'admin' && 
-        req.user.id !== transaction.from_user_id && 
-        req.user.id !== transaction.to_user_id) {
-      return res.status(403).json({
-        error: 'Access Forbidden',
-        message: 'You do not have permission to view this transaction'
-      });
-    }
-    
-    res.json({
-      message: 'Transaction retrieved successfully',
-      data: transaction
-    });
-    
-  } catch (error) {
-    console.error('Get transaction error:', error);
-    res.status(500).json({
-      error: 'Retrieval Failed',
-      message: 'Unable to retrieve transaction'
-    });
-  }
-});
-
 // @route   PUT /api/transactions/:id/status
 // @desc    Update transaction status
 // @access  Private
 router.put('/:id/status', [
+  authMiddleware,
   body('status')
     .isIn(['confirmed', 'in_transit', 'delivered', 'verified', 'rejected', 'cancelled'])
     .withMessage('Invalid status'),
@@ -480,6 +428,150 @@ router.get('/stats/summary', authorize('admin', 'supplier', 'distributor', 'reta
     res.status(500).json({
       error: 'Stats Retrieval Failed',
       message: 'Unable to retrieve transaction statistics'
+    });
+  }
+});
+
+// @route   GET /api/transactions/search
+// @desc    Search transactions by ID, hash, or other criteria
+// @access  Private
+router.get('/search', [
+  authMiddleware,
+  query('q')
+    .notEmpty()
+    .withMessage('Search query is required')
+    .isLength({ min: 1 })
+    .withMessage('Search query must be at least 1 character')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        error: 'Validation Error',
+        details: errors.array()
+      });
+    }
+
+    const { q } = req.query;
+    const { Op } = require('sequelize');
+
+    // Build where clause based on user role
+    let baseWhere = {};
+    if (req.user.role !== 'admin') {
+      baseWhere = {
+        [Op.or]: [
+          { from_user_id: req.user.id },
+          { to_user_id: req.user.id }
+        ]
+      };
+    }
+
+    // Search by ID, hash, or product name
+    const searchWhere = {
+      ...baseWhere,
+      [Op.or]: [
+        { id: q },
+        { transaction_hash: { [Op.iLike]: `%${q}%` } },
+        { notes: { [Op.iLike]: `%${q}%` } }
+      ]
+    };
+
+    const transactions = await Transaction.findAll({
+      where: searchWhere,
+      include: [
+        {
+          model: User,
+          as: 'FromUser',
+          attributes: ['id', 'first_name', 'last_name', 'company_name', 'role']
+        },
+        {
+          model: User,
+          as: 'ToUser', 
+          attributes: ['id', 'first_name', 'last_name', 'company_name', 'role']
+        },
+        {
+          model: Product,
+          as: 'Product',
+          attributes: ['id', 'name', 'sku', 'unit']
+        }
+      ],
+      order: [['created_at', 'DESC']],
+      limit: 20
+    });
+
+    res.json({
+      message: 'Search completed successfully',
+      data: transactions,
+      count: transactions.length
+    });
+
+  } catch (error) {
+    console.error('Transaction search error:', error);
+    res.status(500).json({
+      error: 'Search Failed',
+      message: 'Unable to search transactions'
+    });
+  }
+});
+
+// @route   GET /api/transactions/:id
+// @desc    Get specific transaction by ID
+// @access  Private
+router.get('/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { Op } = require('sequelize');
+
+    // Build where clause based on user role
+    let where = { id };
+    if (req.user.role !== 'admin') {
+      where = {
+        id,
+        [Op.or]: [
+          { from_user_id: req.user.id },
+          { to_user_id: req.user.id }
+        ]
+      };
+    }
+
+    const transaction = await Transaction.findOne({
+      where,
+      include: [
+        {
+          model: User,
+          as: 'FromUser',
+          attributes: ['id', 'first_name', 'last_name', 'company_name', 'role']
+        },
+        {
+          model: User,
+          as: 'ToUser',
+          attributes: ['id', 'first_name', 'last_name', 'company_name', 'role']
+        },
+        {
+          model: Product,
+          as: 'Product',
+          attributes: ['id', 'name', 'sku', 'unit', 'description']
+        }
+      ]
+    });
+
+    if (!transaction) {
+      return res.status(404).json({
+        error: 'Transaction Not Found',
+        message: 'The requested transaction does not exist or you do not have permission to view it'
+      });
+    }
+
+    res.json({
+      message: 'Transaction retrieved successfully',
+      data: transaction
+    });
+
+  } catch (error) {
+    console.error('Get transaction error:', error);
+    res.status(500).json({
+      error: 'Retrieval Failed',
+      message: 'Unable to retrieve transaction'
     });
   }
 });

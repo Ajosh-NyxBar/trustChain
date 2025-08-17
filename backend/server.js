@@ -19,6 +19,7 @@ const transactionRoutes = require('./routes/transactions');
 const productRoutes = require('./routes/products');
 const analyticsRoutes = require('./routes/analytics');
 const uploadRoutes = require('./routes/upload');
+const blockchainRoutes = require('./routes/blockchain');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -107,6 +108,7 @@ app.use('/api/transactions', authMiddleware, transactionRoutes);
 app.use('/api/products', authMiddleware, productRoutes);
 app.use('/api/analytics', authMiddleware, analyticsRoutes);
 app.use('/api/upload', authMiddleware, uploadRoutes);
+app.use('/api/blockchain', authMiddleware, blockchainRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
