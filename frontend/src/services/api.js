@@ -56,6 +56,32 @@ class ApiService {
     }
   }
 
+  // Generic HTTP methods
+  async get(endpoint, params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.makeRequest(`${endpoint}${queryString ? `?${queryString}` : ''}`);
+  }
+
+  async post(endpoint, data = {}) {
+    return this.makeRequest(endpoint, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async put(endpoint, data = {}) {
+    return this.makeRequest(endpoint, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async delete(endpoint) {
+    return this.makeRequest(endpoint, {
+      method: 'DELETE',
+    });
+  }
+
   // Authentication
   async login(credentials) {
     const data = await this.makeRequest('/auth/login', {
@@ -63,8 +89,8 @@ class ApiService {
       body: JSON.stringify(credentials),
     });
     
-    if (data.token) {
-      this.setToken(data.token);
+    if (data.tokens && data.tokens.access) {
+      this.setToken(data.tokens.access);
     }
     
     return data;
@@ -102,6 +128,11 @@ class ApiService {
   // User management
   async getCurrentUser() {
     return this.makeRequest('/users/me');
+  }
+
+  async getUsers(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.makeRequest(`/users${queryString ? `?${queryString}` : ''}`);
   }
 
   async updateProfile(userData) {
