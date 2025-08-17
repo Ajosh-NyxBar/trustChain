@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { 
   ShieldCheckIcon, 
   EyeIcon, 
@@ -13,6 +13,9 @@ import {
   CheckCircleIcon,
   XMarkIcon
 } from '@heroicons/react/24/outline';
+import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../hooks/useToast';
+import { ToastContainer } from '../components/Toast';
 import blockIcon from '../assets/block.png';
 
 const Register = () => {
@@ -46,6 +49,10 @@ const Register = () => {
     special: false
   });
 
+  const { register } = useAuth();
+  const navigate = useNavigate();
+  const { toasts, removeToast, registerSuccess, error, success } = useToast();
+
   const validatePassword = (password) => {
     setPasswordValidation({
       length: password.length >= 8,
@@ -68,12 +75,48 @@ const Register = () => {
     e.preventDefault();
     setIsLoading(true);
     
-    // Simulate registration process
-    setTimeout(() => {
-      console.log('Registration attempt:', formData);
+    try {
+      // Validate passwords match
+      if (formData.password !== formData.confirmPassword) {
+        error('Password dan konfirmasi password tidak cocok');
+        return;
+      }
+
+      // Validate password strength
+      const isPasswordValid = Object.values(passwordValidation).every(Boolean);
+      if (!isPasswordValid) {
+        error('Password tidak memenuhi kriteria keamanan yang diperlukan');
+        return;
+      }
+
+      // Prepare registration data
+      const registrationData = {
+        email: formData.email,
+        password: formData.password,
+        first_name: formData.fullName.split(' ')[0],
+        last_name: formData.fullName.split(' ').slice(1).join(' ') || formData.fullName.split(' ')[0],
+        phone: formData.phone,
+        role: 'supplier', // Default role, can be changed later
+        company_name: formData.businessName,
+        company_address: formData.businessAddress,
+        company_type: formData.businessType || 'individual' // Use the enum value directly
+      };
+
+      await register(registrationData);
+      
+      // Show success notification
+      registerSuccess(formData.email);
+      
+      // Redirect to login after delay
+      setTimeout(() => {
+        navigate('/login');
+      }, 2000);
+      
+    } catch (err) {
+      error(err.message || 'Registrasi gagal. Silakan coba lagi.');
+    } finally {
       setIsLoading(false);
-      // Redirect to success page or login
-    }, 2000);
+    }
   };
 
   const nextStep = () => {
@@ -85,14 +128,10 @@ const Register = () => {
   };
 
   const businessTypes = [
-    'Retail/Perdagangan',
-    'Manufaktur',
-    'Jasa',
-    'Teknologi',
-    'Makanan & Minuman',
-    'Fashion',
-    'Pertanian',
-    'Lainnya'
+    { value: 'umkm', label: 'UMKM / Usaha Kecil Menengah' },
+    { value: 'corporation', label: 'Perusahaan / Korporasi' },
+    { value: 'cooperative', label: 'Koperasi' },
+    { value: 'individual', label: 'Perorangan / Individu' }
   ];
 
   const features = [
@@ -276,7 +315,7 @@ const Register = () => {
               >
                 <option value="">Pilih jenis bisnis</option>
                 {businessTypes.map((type) => (
-                  <option key={type} value={type}>{type}</option>
+                  <option key={type.value} value={type.value}>{type.label}</option>
                 ))}
               </select>
             </div>
@@ -574,6 +613,9 @@ const Register = () => {
           </div>
         </div>
       </div>
+      
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
     </div>
   );
 };

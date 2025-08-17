@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { 
   ShieldCheckIcon, 
   EyeIcon, 
@@ -9,6 +9,9 @@ import {
   ArrowRightIcon,
   StarIcon
 } from '@heroicons/react/24/outline';
+import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../hooks/useToast';
+import { ToastContainer } from '../components/Toast';
 import blockIcon from '../assets/block.png';
 
 const Login = () => {
@@ -18,15 +21,31 @@ const Login = () => {
     email: '',
     password: ''
   });
+  
+  const { login } = useAuth();
+  const navigate = useNavigate();
+  const { toasts, removeToast, loginSuccess, error } = useToast();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    // Handle login logic here
-    setTimeout(() => {
-      console.log('Login attempt:', formData);
+    
+    try {
+      const response = await login(formData);
+      
+      // Show success notification
+      loginSuccess(response.user.first_name || response.user.email);
+      
+      // Redirect to dashboard after short delay
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 1500);
+      
+    } catch (err) {
+      error(err.message || 'Login gagal. Silakan periksa email dan password Anda.');
+    } finally {
       setIsLoading(false);
-    }, 2000);
+    }
   };
 
   const features = [
@@ -291,6 +310,9 @@ const Login = () => {
           </div>
         </div>
       </div>
+      
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
     </div>
   );
 };
