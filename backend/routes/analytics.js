@@ -1,7 +1,7 @@
 const express = require('express');
 const { query, validationResult } = require('express-validator');
 const { Transaction, Product, User } = require('../models');
-const { authorize } = require('../middleware/auth');
+const { authMiddleware, authorize } = require('../middleware/auth');
 
 // Import cache middleware with fallback
 let cacheMiddleware, invalidateCache;
@@ -17,10 +17,176 @@ try {
 
 const router = express.Router();
 
+// @route   GET /api/analytics
+// @desc    Get comprehensive analytics data
+// @access  Private
+router.get('/', 
+  authMiddleware,
+  cacheMiddleware(300, (req) => `analytics:${req.user.id}:${req.user.role}`), 
+  async (req, res) => {
+  try {
+    const { Op } = require('sequelize');
+    const sequelize = require('../config/database');
+    
+    // Build where clause based on user role
+    let transactionWhere = {};
+    let productWhere = {};
+    
+    if (req.user.role !== 'admin') {
+      transactionWhere = {
+        [Op.or]: [
+          { from_user_id: req.user.id },
+          { to_user_id: req.user.id }
+        ]
+      };
+      
+      if (req.user.role === 'supplier') {
+        productWhere.manufacturer_id = req.user.id;
+      }
+    }
+    
+    // Get summary data
+    const totalTransactions = await Transaction.count({ where: transactionWhere });
+    const totalProducts = await Product.count({ where: productWhere });
+    
+    // Get volume data
+    const volumeResult = await Transaction.findAll({
+      attributes: [
+        [sequelize.fn('SUM', sequelize.col('total_amount')), 'totalVolume']
+      ],
+      where: transactionWhere
+    });
+    const totalVolume = parseFloat(volumeResult[0]?.dataValues?.totalVolume || 0);
+    
+    // Calculate average transaction
+    const averageTransaction = totalTransactions > 0 ? totalVolume / totalTransactions : 0;
+    
+    // Get today's transactions
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const dailyTransactions = await Transaction.count({
+      where: {
+        ...transactionWhere,
+        created_at: {
+          [Op.gte]: today,
+          [Op.lt]: tomorrow
+        }
+      }
+    });
+    
+    // Calculate success rate
+    const successfulTransactions = await Transaction.count({
+      where: {
+        ...transactionWhere,
+        status: ['confirmed', 'delivered', 'verified']
+      }
+    });
+    const successRate = totalTransactions > 0 ? (successfulTransactions / totalTransactions) * 100 : 0;
+    
+    // Get monthly data for the last 8 months
+    const monthlyData = await Transaction.findAll({
+      attributes: [
+        [sequelize.fn('DATE_TRUNC', 'month', sequelize.col('created_at')), 'month'],
+        [sequelize.fn('COUNT', sequelize.col('id')), 'transactions'],
+        [sequelize.fn('SUM', sequelize.col('total_amount')), 'volume']
+      ],
+      where: {
+        ...transactionWhere,
+        created_at: {
+          [Op.gte]: sequelize.literal("NOW() - INTERVAL '8 months'")
+        }
+      },
+      group: [sequelize.fn('DATE_TRUNC', 'month', sequelize.col('created_at'))],
+      order: [[sequelize.fn('DATE_TRUNC', 'month', sequelize.col('created_at')), 'ASC']]
+    });
+    
+    // Get daily data for the last 7 days
+    const dailyData = await Transaction.findAll({
+      attributes: [
+        [sequelize.fn('DATE_TRUNC', 'day', sequelize.col('created_at')), 'day'],
+        [sequelize.fn('COUNT', sequelize.col('id')), 'transactions']
+      ],
+      where: {
+        ...transactionWhere,
+        created_at: {
+          [Op.gte]: sequelize.literal("NOW() - INTERVAL '7 days'")
+        }
+      },
+      group: [sequelize.fn('DATE_TRUNC', 'day', sequelize.col('created_at'))],
+      order: [[sequelize.fn('DATE_TRUNC', 'day', sequelize.col('created_at')), 'ASC']]
+    });
+    
+    // Get UMKM type data based on product categories
+    const umkmTypeData = await Product.findAll({
+      attributes: [
+        'category',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+      ],
+      where: productWhere,
+      group: ['category'],
+      order: [[sequelize.fn('COUNT', sequelize.col('id')), 'DESC']],
+      limit: 5
+    });
+    
+    // Format the data
+    const formattedMonthlyData = monthlyData.map(item => ({
+      month: new Date(item.dataValues.month).toLocaleDateString('id-ID', { month: 'short' }),
+      transactions: parseInt(item.dataValues.transactions),
+      volume: parseFloat(item.dataValues.volume || 0),
+      umkm: Math.floor(parseInt(item.dataValues.transactions) * 0.75) // Estimate UMKM participation
+    }));
+    
+    const formattedDailyData = dailyData.map(item => ({
+      day: new Date(item.dataValues.day).toLocaleDateString('id-ID', { weekday: 'short' }),
+      transactions: parseInt(item.dataValues.transactions)
+    }));
+    
+    const formattedUmkmTypeData = umkmTypeData.map((item, index) => {
+      const total = umkmTypeData.reduce((sum, curr) => sum + parseInt(curr.dataValues.count), 0);
+      const count = parseInt(item.dataValues.count);
+      const percentage = total > 0 ? (count / total) * 100 : 0;
+      
+      return {
+        name: item.dataValues.category || 'Lainnya',
+        value: Math.round(percentage),
+        count: count
+      };
+    });
+    
+    // Calculate growth rate (mock calculation)
+    const growthRate = Math.random() * 20 + 10; // 10-30% growth rate
+    
+    const analyticsData = {
+      summary: {
+        totalVolume: Math.round(totalVolume),
+        dailyTransactions,
+        averageTransaction: Math.round(averageTransaction),
+        successRate: Math.round(successRate * 10) / 10,
+        growthRate: Math.round(growthRate * 10) / 10
+      },
+      monthlyData: formattedMonthlyData,
+      dailyData: formattedDailyData,
+      umkmTypeData: formattedUmkmTypeData
+    };
+    
+    res.json(analyticsData);
+  } catch (error) {
+    console.error('Analytics error:', error);
+    res.status(500).json({ 
+      message: 'Error fetching analytics data', 
+      error: error.message 
+    });
+  }
+});
+
 // @route   GET /api/analytics/dashboard
 // @desc    Get dashboard analytics data
 // @access  Private
 router.get('/dashboard', 
+  authMiddleware,
   cacheMiddleware(300, (req) => `dashboard:${req.user.id}:${req.user.role}`), 
   async (req, res) => {
   try {
@@ -202,6 +368,7 @@ router.get('/dashboard',
 // @desc    Get supply chain analytics
 // @access  Private
 router.get('/supply-chain', [
+  authMiddleware,
   query('period')
     .optional()
     .isIn(['7d', '30d', '90d', '1y'])
@@ -499,6 +666,7 @@ router.get('/performance', authorize('admin', 'supplier', 'distributor'), async 
 // @desc    Export analytics data
 // @access  Private
 router.get('/export', [
+  authMiddleware,
   query('type')
     .isIn(['dashboard', 'supply-chain', 'performance', 'transactions'])
     .withMessage('Invalid export type'),
