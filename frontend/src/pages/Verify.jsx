@@ -6,36 +6,63 @@ import {
   ClockIcon,
   ShieldCheckIcon 
 } from '@heroicons/react/24/outline';
+import { useToast } from '../hooks/useToast';
+import { ToastContainer } from '../components/Toast';
+import apiService from '../services/api';
 
 const VerificationResult = ({ transaction }) => {
   if (!transaction) return null;
 
-  const isVerified = transaction.status === 'verified';
+  const isVerified = transaction.status === 'verified' || transaction.blockchainVerified;
+  const isNotFound = transaction.status === 'not_found';
+  
+  if (isNotFound) {
+    return (
+      <div className="mt-6 p-6 rounded-xl border-2 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700">
+        <div className="flex items-center mb-4">
+          <ExclamationTriangleIcon className="h-8 w-8 text-red-500 mr-3" />
+          <div>
+            <h3 className="text-lg font-bold text-red-800 dark:text-red-300">
+              Transaction Not Found
+            </h3>
+            <p className="text-sm text-red-600 dark:text-red-400">
+              The transaction ID you entered was not found in our system
+            </p>
+          </div>
+        </div>
+        <div className="bg-red-100 dark:bg-red-900/40 p-4 rounded-lg">
+          <p className="text-sm text-red-700 dark:text-red-300">
+            <strong>Searched ID:</strong> {transaction.id}
+          </p>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className={`mt-6 p-6 rounded-xl border-2 ${
       isVerified 
         ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-700' 
-        : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700'
+        : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700'
     }`}>
       <div className="flex items-center mb-4">
         {isVerified ? (
           <CheckCircleIcon className="h-8 w-8 text-emerald-500 mr-3" />
         ) : (
-          <ExclamationTriangleIcon className="h-8 w-8 text-red-500 mr-3" />
+          <ClockIcon className="h-8 w-8 text-yellow-500 mr-3" />
         )}
         <div>
           <h3 className={`text-lg font-bold ${
-            isVerified ? 'text-emerald-800 dark:text-emerald-300' : 'text-red-800 dark:text-red-300'
+            isVerified ? 'text-emerald-800 dark:text-emerald-300' : 'text-yellow-800 dark:text-yellow-300'
           }`}>
-            {isVerified ? 'Transaction Verified' : 'Invalid Transaction'}
+            {isVerified ? 'Transaction Verified' : 'Transaction Pending Verification'}
           </h3>
           <p className={`text-sm ${
-            isVerified ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+            isVerified ? 'text-emerald-600 dark:text-emerald-400' : 'text-yellow-600 dark:text-yellow-400'
           }`}>
             {isVerified 
               ? 'This transaction has been verified on the blockchain'
-              : 'This transaction could not be verified or has issues'
+              : 'This transaction exists but needs blockchain verification'
             }
           </p>
         </div>
@@ -48,32 +75,89 @@ const VerificationResult = ({ transaction }) => {
             <p className="text-sm text-navy-500 dark:text-blue-400 font-mono">{transaction.id}</p>
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Sender</p>
-            <p className="text-sm text-navy-500 dark:text-blue-400">{transaction.sender}</p>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">From</p>
+            <p className="text-sm text-navy-500 dark:text-blue-400">
+              {transaction.FromUser?.company_name || 
+               `${transaction.FromUser?.first_name} ${transaction.FromUser?.last_name}` ||
+               transaction.sender || 'Unknown'}
+            </p>
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Receiver</p>
-            <p className="text-sm text-navy-500 dark:text-blue-400">{transaction.receiver}</p>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">To</p>
+            <p className="text-sm text-navy-500 dark:text-blue-400">
+              {transaction.ToUser?.company_name || 
+               `${transaction.ToUser?.first_name} ${transaction.ToUser?.last_name}` ||
+               transaction.receiver || 'Unknown'}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Product</p>
+            <p className="text-sm text-navy-500 dark:text-blue-400">
+              {transaction.Product?.name || 'Unknown Product'}
+            </p>
           </div>
         </div>
         
         <div className="space-y-3">
           <div>
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Amount</p>
-            <p className="text-sm text-emerald-600 dark:text-emerald-400 font-semibold">{transaction.amount}</p>
+            <p className="text-sm text-emerald-600 dark:text-emerald-400 font-semibold">
+              {transaction.total_amount ? 
+                new Intl.NumberFormat('id-ID', {
+                  style: 'currency',
+                  currency: 'IDR'
+                }).format(transaction.total_amount) : 
+                transaction.amount || 'Unknown'
+              }
+            </p>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Quantity</p>
+            <p className="text-sm text-navy-500 dark:text-blue-400">
+              {transaction.quantity} {transaction.unit}
+            </p>
           </div>
           <div>
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Date</p>
-            <p className="text-sm text-navy-500 dark:text-blue-400">{transaction.date}</p>
+            <p className="text-sm text-navy-500 dark:text-blue-400">
+              {transaction.created_at ? 
+                new Date(transaction.created_at).toLocaleDateString('id-ID', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                }) : 
+                transaction.date || 'Unknown'
+              }
+            </p>
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Block Hash</p>
-            <p className="text-sm text-navy-500 dark:text-blue-400 font-mono">{transaction.blockHash}</p>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Status</p>
+            <div className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+              transaction.status === 'confirmed' ? 'bg-emerald-100 text-emerald-800' :
+              transaction.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+              transaction.status === 'verified' ? 'bg-blue-100 text-blue-800' :
+              'bg-gray-100 text-gray-800'
+            }`}>
+              {transaction.status}
+            </div>
           </div>
         </div>
       </div>
 
-      {isVerified && (
+      {transaction.transaction_hash && (
+        <div className="mt-4 pt-4 border-t border-emerald-200 dark:border-emerald-700">
+          <div>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Blockchain Hash</p>
+            <p className="text-sm text-navy-500 dark:text-blue-400 font-mono break-all">
+              {transaction.transaction_hash}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {isVerified && transaction.blockchainVerified && (
         <div className="mt-4 pt-4 border-t border-emerald-200 dark:border-emerald-700">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
@@ -82,10 +166,19 @@ const VerificationResult = ({ transaction }) => {
                 Blockchain Confirmation: {transaction.confirmations || 12} blocks
               </span>
             </div>
-            <div className="text-sm text-emerald-600 dark:text-emerald-400">
-              Gas Fee: {transaction.gasFee || '0.002 ETH'}
-            </div>
+            {transaction.blockHash && (
+              <div className="text-sm text-emerald-600 dark:text-emerald-400">
+                Block: {transaction.blockHash.slice(0, 10)}...
+              </div>
+            )}
           </div>
+        </div>
+      )}
+
+      {transaction.notes && (
+        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+          <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">{transaction.notes}</p>
         </div>
       )}
     </div>
@@ -96,52 +189,93 @@ const Verify = () => {
   const [transactionId, setTransactionId] = useState('');
   const [verificationResult, setVerificationResult] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-
-  // Mock transaction data
-  const mockTransactions = {
-    '#TXN-0001': {
-      id: '#TXN-0001',
-      sender: 'Toko Elektronik Jaya',
-      receiver: 'Budi Santoso',
-      amount: 'Rp 1,250,000',
-      status: 'verified',
-      date: '10 Aug 2025',
-      blockHash: '0x7a8b9c...def123',
-      confirmations: 15,
-      gasFee: '0.003 ETH'
-    },
-    '#TXN-0002': {
-      id: '#TXN-0002',
-      sender: 'CV Mandiri Sejahtera',
-      receiver: 'Supplier ABC',
-      amount: 'Rp 850,000',
-      status: 'pending',
-      date: '10 Aug 2025',
-      blockHash: '0x4e5f6a...789bcd'
-    },
-    '#TXN-0404': {
-      id: '#TXN-0404',
-      sender: 'Unknown',
-      receiver: 'Unknown',
-      amount: 'Rp 0',
-      status: 'failed',
-      date: 'Invalid',
-      blockHash: 'Invalid'
-    }
-  };
+  const { toasts, removeToast, success, error } = useToast();
 
   const handleVerify = async (e) => {
     e.preventDefault();
-    if (!transactionId.trim()) return;
+    if (!transactionId.trim()) {
+      error('Masukkan ID transaksi yang valid');
+      return;
+    }
 
     setIsLoading(true);
     
-    // Simulate API call delay
-    setTimeout(() => {
-      const result = mockTransactions[transactionId] || mockTransactions['#TXN-0404'];
-      setVerificationResult(result);
+    try {
+      // First try to get transaction from our database
+      const data = await apiService.get(`/transactions/${transactionId}`);
+      
+      if (data) {
+        const transaction = data;
+        
+        // If it has a blockchain hash, verify on blockchain
+        if (transaction.transaction_hash) {
+          try {
+            const verifyData = await apiService.post('/blockchain/verify', {
+              transactionHash: transaction.transaction_hash,
+              transactionId: transaction.id
+            });
+            
+            setVerificationResult({
+              ...transaction,
+              blockchainVerified: verifyData.verified || false,
+              blockHash: verifyResponse.blockHash,
+              confirmations: verifyResponse.confirmations || 0
+            });
+            
+            if (verifyResponse.verified) {
+              success('Transaksi berhasil diverifikasi di blockchain!');
+            } else {
+              error('Transaksi tidak dapat diverifikasi di blockchain');
+            }
+          } catch (blockchainError) {
+            // Show transaction data even if blockchain verification fails
+            setVerificationResult({
+              ...transaction,
+              blockchainVerified: false
+            });
+            error('Gagal verifikasi blockchain, menampilkan data transaksi');
+          }
+        } else {
+          // Transaction exists but no blockchain hash
+          setVerificationResult({
+            ...transaction,
+            blockchainVerified: false
+          });
+          error('Transaksi belum tercatat di blockchain');
+        }
+      }
+    } catch (err) {
+      console.error('Verification error:', err);
+      
+      // Fallback: try to search by different formats
+      try {
+        const searchData = await apiService.get(`/transactions/search?q=${transactionId}`);
+        if (searchData && searchData.length > 0) {
+          const transaction = searchData[0];
+          setVerificationResult({
+            ...transaction,
+            blockchainVerified: false
+          });
+          error('Transaksi ditemukan tetapi belum terverifikasi di blockchain');
+        } else {
+          setVerificationResult({
+            id: transactionId,
+            status: 'not_found',
+            error: 'Transaction not found'
+          });
+          error('Transaksi tidak ditemukan');
+        }
+      } catch (searchErr) {
+        setVerificationResult({
+          id: transactionId,
+          status: 'not_found',
+          error: 'Transaction not found'
+        });
+        error('Transaksi tidak ditemukan');
+      }
+    } finally {
       setIsLoading(false);
-    }, 2000);
+    }
   };
 
   const recentVerifications = [
@@ -265,6 +399,9 @@ const Verify = () => {
           </ul>
         </div>
       </div>
+
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LineChart, 
   Line, 
@@ -22,37 +22,74 @@ import {
   CalendarDaysIcon,
   CurrencyDollarIcon 
 } from '@heroicons/react/24/outline';
+import apiService from '../services/api';
+import { useToast } from '../hooks/useToast';
+import { ToastContainer } from '../components/Toast';
 
 const Analytics = () => {
-  // Sample data for charts
-  const monthlyData = [
-    { month: 'Jan', transactions: 120, volume: 45000000, umkm: 95 },
-    { month: 'Feb', transactions: 145, volume: 52000000, umkm: 108 },
-    { month: 'Mar', transactions: 180, volume: 68000000, umkm: 125 },
-    { month: 'Apr', transactions: 220, volume: 78000000, umkm: 140 },
-    { month: 'May', transactions: 280, volume: 95000000, umkm: 165 },
-    { month: 'Jun', transactions: 320, volume: 115000000, umkm: 190 },
-    { month: 'Jul', transactions: 385, volume: 135000000, umkm: 220 },
-    { month: 'Aug', transactions: 450, volume: 145000000, umkm: 245 }
-  ];
+  const [analytics, setAnalytics] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const { toasts, removeToast, error } = useToast();
 
-  const dailyData = [
-    { day: 'Sen', transactions: 45 },
-    { day: 'Sel', transactions: 52 },
-    { day: 'Rab', transactions: 48 },
-    { day: 'Kam', transactions: 61 },
-    { day: 'Jum', transactions: 75 },
-    { day: 'Sab', transactions: 38 },
-    { day: 'Min', transactions: 28 }
-  ];
+  useEffect(() => {
+    fetchAnalytics();
+  }, []);
 
-  const umkmTypeData = [
-    { name: 'Makanan & Minuman', value: 35, count: 420 },
-    { name: 'Fashion & Tekstil', value: 25, count: 300 },
-    { name: 'Elektronik', value: 20, count: 240 },
-    { name: 'Kerajinan', value: 12, count: 144 },
-    { name: 'Jasa', value: 8, count: 96 }
-  ];
+  const fetchAnalytics = async () => {
+    try {
+      setLoading(true);
+      const data = await apiService.get('/analytics');
+      setAnalytics(data);
+    } catch (err) {
+      console.error('Error fetching analytics:', err);
+      error('Gagal memuat data analytics');
+      // Use fallback data if API fails
+      setAnalytics(getFallbackData());
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getFallbackData = () => ({
+    summary: {
+      totalVolume: 145000000,
+      dailyTransactions: 67,
+      averageTransaction: 322222,
+      successRate: 98.7,
+      growthRate: 18.5
+    },
+    monthlyData: [
+      { month: 'Jan', transactions: 120, volume: 45000000, umkm: 95 },
+      { month: 'Feb', transactions: 145, volume: 52000000, umkm: 108 },
+      { month: 'Mar', transactions: 180, volume: 68000000, umkm: 125 },
+      { month: 'Apr', transactions: 220, volume: 78000000, umkm: 140 },
+      { month: 'May', transactions: 280, volume: 95000000, umkm: 165 },
+      { month: 'Jun', transactions: 320, volume: 115000000, umkm: 190 },
+      { month: 'Jul', transactions: 385, volume: 135000000, umkm: 220 },
+      { month: 'Aug', transactions: 450, volume: 145000000, umkm: 245 }
+    ],
+    dailyData: [
+      { day: 'Sen', transactions: 45 },
+      { day: 'Sel', transactions: 52 },
+      { day: 'Rab', transactions: 48 },
+      { day: 'Kam', transactions: 61 },
+      { day: 'Jum', transactions: 75 },
+      { day: 'Sab', transactions: 38 },
+      { day: 'Min', transactions: 28 }
+    ],
+    umkmTypeData: [
+      { name: 'Makanan & Minuman', value: 35, count: 420 },
+      { name: 'Fashion & Tekstil', value: 25, count: 300 },
+      { name: 'Elektronik', value: 20, count: 240 },
+      { name: 'Kerajinan', value: 12, count: 144 },
+      { name: 'Jasa', value: 8, count: 96 }
+    ]
+  });
+
+  const monthlyData = analytics?.monthlyData || [];
+  const dailyData = analytics?.dailyData || [];
+  const umkmTypeData = analytics?.umkmTypeData || [];
+  const summary = analytics?.summary || {};
 
   const COLORS = ['#2ECC71', '#1ABC9C', '#0A2540', '#F39C12', '#E74C3C'];
 
@@ -64,6 +101,14 @@ const Analytics = () => {
       maximumFractionDigits: 0
     }).format(value);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
@@ -84,10 +129,14 @@ const Analytics = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Total Volume</p>
-                <p className="text-2xl font-bold text-navy-500 dark:text-white">{formatCurrency(145000000)}</p>
+                <p className="text-2xl font-bold text-navy-500 dark:text-white">
+                  {formatCurrency(summary.totalVolume || 145000000)}
+                </p>
                 <div className="flex items-center mt-2">
                   <ArrowTrendingUpIcon className="h-4 w-4 text-emerald-500 mr-1" />
-                  <span className="text-sm font-medium text-emerald-500">+18.5%</span>
+                  <span className="text-sm font-medium text-emerald-500">
+                    +{summary.growthRate || 18.5}%
+                  </span>
                 </div>
               </div>
               <div className="p-3 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600">
@@ -100,7 +149,9 @@ const Analytics = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Daily Transactions</p>
-                <p className="text-2xl font-bold text-navy-500 dark:text-white">67</p>
+                <p className="text-2xl font-bold text-navy-500 dark:text-white">
+                  {summary.dailyTransactions || 67}
+                </p>
                 <div className="flex items-center mt-2">
                   <ArrowTrendingUpIcon className="h-4 w-4 text-emerald-500 mr-1" />
                   <span className="text-sm font-medium text-emerald-500">+12.3%</span>
@@ -116,7 +167,9 @@ const Analytics = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Average Transaction</p>
-                <p className="text-2xl font-bold text-navy-500 dark:text-white">{formatCurrency(322222)}</p>
+                <p className="text-2xl font-bold text-navy-500 dark:text-white">
+                  {formatCurrency(summary.averageTransaction || 322222)}
+                </p>
                 <div className="flex items-center mt-2">
                   <ArrowTrendingDownIcon className="h-4 w-4 text-red-500 mr-1" />
                   <span className="text-sm font-medium text-red-500">-2.1%</span>
@@ -132,7 +185,9 @@ const Analytics = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Success Rate</p>
-                <p className="text-2xl font-bold text-navy-500 dark:text-white">98.7%</p>
+                <p className="text-2xl font-bold text-navy-500 dark:text-white">
+                  {summary.successRate || 98.7}%
+                </p>
                 <div className="flex items-center mt-2">
                   <ArrowTrendingUpIcon className="h-4 w-4 text-emerald-500 mr-1" />
                   <span className="text-sm font-medium text-emerald-500">+0.3%</span>
@@ -149,125 +204,229 @@ const Analytics = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
           {/* Transaction Volume Trend */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-100 dark:border-gray-700">
-            <h2 className="text-xl font-bold text-navy-500 dark:text-white mb-4">Transaction Volume Trend</h2>
+            <h3 className="text-lg font-bold text-navy-500 dark:text-white mb-4">
+              Transaction Volume Trend
+            </h3>
             <ResponsiveContainer width="100%" height={300}>
               <AreaChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis tickFormatter={(value) => `${value/1000000}M`} />
-                <Tooltip formatter={(value) => formatCurrency(value)} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+                <XAxis 
+                  dataKey="month" 
+                  stroke="#6B7280" 
+                  tick={{ fill: '#6B7280' }}
+                />
+                <YAxis 
+                  stroke="#6B7280" 
+                  tick={{ fill: '#6B7280' }}
+                  tickFormatter={(value) => `${(value / 1000000).toFixed(0)}M`}
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: '#1F2937', 
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: '#fff'
+                  }}
+                  formatter={(value) => [formatCurrency(value), 'Volume']}
+                />
                 <Area 
                   type="monotone" 
                   dataKey="volume" 
                   stroke="#2ECC71" 
-                  fill="#2ECC71" 
-                  fillOpacity={0.3}
+                  fill="url(#colorVolume)" 
+                  strokeWidth={2}
                 />
+                <defs>
+                  <linearGradient id="colorVolume" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#2ECC71" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#2ECC71" stopOpacity={0.1}/>
+                  </linearGradient>
+                </defs>
               </AreaChart>
             </ResponsiveContainer>
           </div>
 
-          {/* Transaction Count */}
+          {/* Daily Transaction Count */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-100 dark:border-gray-700">
-            <h2 className="text-xl font-bold text-navy-500 dark:text-white mb-4">Monthly Transaction Count</h2>
+            <h3 className="text-lg font-bold text-navy-500 dark:text-white mb-4">
+              Daily Transaction Count
+            </h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={dailyData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+                <XAxis 
+                  dataKey="day" 
+                  stroke="#6B7280" 
+                  tick={{ fill: '#6B7280' }}
+                />
+                <YAxis 
+                  stroke="#6B7280" 
+                  tick={{ fill: '#6B7280' }}
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: '#1F2937', 
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: '#fff'
+                  }}
+                  formatter={(value) => [value, 'Transactions']}
+                />
+                <Bar 
+                  dataKey="transactions" 
+                  fill="#1ABC9C"
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* More Charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          {/* Monthly Transaction Growth */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-100 dark:border-gray-700">
+            <h3 className="text-lg font-bold text-navy-500 dark:text-white mb-4">
+              Monthly Transaction Growth
+            </h3>
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+                <XAxis 
+                  dataKey="month" 
+                  stroke="#6B7280" 
+                  tick={{ fill: '#6B7280' }}
+                />
+                <YAxis 
+                  stroke="#6B7280" 
+                  tick={{ fill: '#6B7280' }}
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: '#1F2937', 
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: '#fff'
+                  }}
+                />
+                <Legend />
                 <Line 
                   type="monotone" 
                   dataKey="transactions" 
-                  stroke="#1ABC9C" 
+                  stroke="#0A2540" 
                   strokeWidth={3}
-                  dot={{ fill: '#1ABC9C', strokeWidth: 2, r: 6 }}
+                  dot={{ fill: '#0A2540', r: 6 }}
+                  name="Transactions"
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="umkm" 
+                  stroke="#F39C12" 
+                  strokeWidth={3}
+                  dot={{ fill: '#F39C12', r: 6 }}
+                  name="UMKM Partners"
                 />
               </LineChart>
             </ResponsiveContainer>
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Daily Transactions */}
+          {/* UMKM Type Distribution */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-100 dark:border-gray-700">
-            <h2 className="text-xl font-bold text-navy-500 dark:text-white mb-4">Daily Transactions (This Week)</h2>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={dailyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="day" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="transactions" fill="#0A2540" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* UMKM by Category */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-100 dark:border-gray-700">
-            <h2 className="text-xl font-bold text-navy-500 dark:text-white mb-4">UMKM by Category</h2>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={umkmTypeData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {umkmTypeData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+            <h3 className="text-lg font-bold text-navy-500 dark:text-white mb-4">
+              Business Type Distribution
+            </h3>
+            <div className="flex flex-col lg:flex-row items-center">
+              <div className="w-full lg:w-1/2">
+                <ResponsiveContainer width="100%" height={250}>
+                  <PieChart>
+                    <Pie
+                      data={umkmTypeData}
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                      label={({ name, value }) => `${value}%`}
+                    >
+                      {umkmTypeData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: '#1F2937', 
+                        border: 'none',
+                        borderRadius: '8px',
+                        color: '#fff'
+                      }}
+                      formatter={(value, name) => [`${value}%`, name]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="w-full lg:w-1/2 mt-4 lg:mt-0">
+                <div className="space-y-3">
+                  {umkmTypeData.map((item, index) => (
+                    <div key={item.name} className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div 
+                          className="w-3 h-3 rounded-full mr-3"
+                          style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                        ></div>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{item.name}</span>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-medium text-navy-500 dark:text-white">
+                          {item.value}%
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {item.count} partners
+                        </div>
+                      </div>
+                    </div>
                   ))}
-                </Pie>
-                <Tooltip formatter={(value, name) => [`${value}%`, name]} />
-              </PieChart>
-            </ResponsiveContainer>
-            
-            <div className="mt-4 space-y-2">
-              {umkmTypeData.map((item, index) => (
-                <div key={index} className="flex items-center justify-between text-sm">
-                  <div className="flex items-center">
-                    <div 
-                      className="w-3 h-3 rounded-full mr-2" 
-                      style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                    ></div>
-                    <span className="text-gray-700 dark:text-gray-300">{item.name}</span>
-                  </div>
-                  <span className="font-medium text-navy-500 dark:text-white">{item.count} UMKM</span>
                 </div>
-              ))}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Insights */}
-        <div className="mt-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-100 dark:border-gray-700">
-          <h2 className="text-xl font-bold text-navy-500 dark:text-white mb-4">Insights & Recommendations</h2>
+        {/* Quick Stats */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-100 dark:border-gray-700">
+          <h3 className="text-lg font-bold text-navy-500 dark:text-white mb-6">
+            Quick Statistics
+          </h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-lg border border-emerald-200 dark:border-emerald-700">
-              <h3 className="font-semibold text-emerald-800 dark:text-emerald-300 mb-2">📈 Positive Growth</h3>
-              <p className="text-sm text-emerald-700 dark:text-emerald-400">
-                Transaction volume increased by 18.5% compared to last month, showing good adoption
-              </p>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 mb-2">
+                {monthlyData.length > 0 ? monthlyData[monthlyData.length - 1]?.transactions || 450 : 450}
+              </div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                Transactions This Month
+              </div>
             </div>
-            <div className="bg-sky-50 dark:bg-sky-900/20 p-4 rounded-lg border border-sky-200 dark:border-sky-700">
-              <h3 className="font-semibold text-sky-800 dark:text-sky-300 mb-2">🍽️ F&B Dominance</h3>
-              <p className="text-sm text-sky-700 dark:text-sky-400">
-                Food & beverage sector dominates 35% of total registered UMKMs
-              </p>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-sky-600 dark:text-sky-400 mb-2">
+                {monthlyData.length > 0 ? monthlyData[monthlyData.length - 1]?.umkm || 245 : 245}
+              </div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                Active UMKM Partners
+              </div>
             </div>
-            <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-lg border border-orange-200 dark:border-orange-700">
-              <h3 className="font-semibold text-orange-800 dark:text-orange-300 mb-2">⚡ High Success Rate</h3>
-              <p className="text-sm text-orange-700 dark:text-orange-400">
-                98.7% success rate shows blockchain system stability and reliability
-              </p>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-navy-600 dark:text-navy-400 mb-2">
+                {formatCurrency(monthlyData.length > 0 ? monthlyData[monthlyData.length - 1]?.volume || 145000000 : 145000000)}
+              </div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                Monthly Volume
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
     </div>
   );
 };
